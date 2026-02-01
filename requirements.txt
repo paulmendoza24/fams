@@ -1,0 +1,9 @@
+pandas
+docxtpl
+docxcompose
+python-docx
+docx2pdf
+PyPDF2
+Pillow
+matplotlib
+customtkinter
