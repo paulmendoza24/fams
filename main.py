@@ -190,8 +190,7 @@ class Worker(threading.Thread):
                     progress=current_step / total_steps,
                     message=f"Error for {s['name']}: {e}",
                 )
-
-        BATCH_SIZE = 10  # 6–10 is the sweet spot
+        os.system("taskkill /f /im WINWORD.EXE >nul 2>&1")
 
         if self.gen_pdf:
             self.ui_callback(
@@ -200,59 +199,34 @@ class Worker(threading.Thread):
             )
 
             os.makedirs(PDF_OUT, exist_ok=True)
+
             total_files = len(docx_files)
             processed_files = 0
 
-            for i in range(0, total_files, BATCH_SIZE):
-                batch = docx_files[i : i + BATCH_SIZE]
-                temp_dir = os.path.join(DOCX_OUT, "__batch__")
-
+            for f in docx_files:
                 try:
-                    os.makedirs(temp_dir, exist_ok=True)
+                    pdf_name = os.path.splitext(os.path.basename(f))[0] + ".pdf"
+                    pdf_path = os.path.join(PDF_OUT, pdf_name)
 
-                    # copy batch files
-                    for f in batch:
-                        shutil.copy2(f, temp_dir)
+                    # 🚨 EXE-SAFE: single file → single file
+                    convert(os.path.abspath(f), os.path.abspath(pdf_path))
 
-                    # fast batch convert (single Word session)
-                    convert(temp_dir, PDF_OUT)
+                    pdf_files.append(pdf_path)
 
-                    # track generated PDFs and update progress
-                    for f in batch:
-                        pdf_name = os.path.splitext(os.path.basename(f))[0] + ".pdf"
-                        pdf_files.append(os.path.join(PDF_OUT, pdf_name))
-                        processed_files += 1
-                        self.ui_callback(
-                            progress=current_step / total_steps
-                            + processed_files / total_files / total_steps,
-                            message=f"🕑 Converting {os.path.basename(f)} ({processed_files}/{total_files})...",
-                        )
+                    self.ui_callback(message=f"✅ PDF created: {pdf_name}")
 
-                except Exception:
-                    # fallback: single-file convert (safe)
-                    for f in batch:
-                        try:
-                            convert(f, PDF_OUT)
-                            pdf_name = os.path.splitext(os.path.basename(f))[0] + ".pdf"
-                            pdf_files.append(os.path.join(PDF_OUT, pdf_name))
-                        except Exception as single_e:
-                            self.ui_callback(
-                                message=f"❌ PDF failed: {os.path.basename(f)} – {single_e}"
-                            )
-                        finally:
-                            processed_files += 1
-                            self.ui_callback(
-                                progress=current_step / total_steps
-                                + processed_files / total_files / total_steps,
-                                message=f"🕑 Converting {os.path.basename(f)} ({processed_files}/{total_files})...",
-                            )
+                except Exception as e:
+                    self.ui_callback(
+                        message=f"❌ PDF failed: {os.path.basename(f)} – {e}"
+                    )
 
                 finally:
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-
-            # cleanup Word (prevents hanging EXE)
-            if sys.platform.startswith("win"):
-                os.system("taskkill /f /im WINWORD.EXE >nul 2>&1")
+                    processed_files += 1
+                    self.ui_callback(
+                        progress=current_step / total_steps
+                        + processed_files / total_files / total_steps,
+                        message=f"🕑 Converting ({processed_files}/{total_files})...",
+                    )
 
             current_step += 1
             self.ui_callback(
@@ -296,13 +270,13 @@ class Worker(threading.Thread):
                     progress=current_step / total_steps,
                     message=f"✅ Merged PDF saved: {merged_pdf_path}",
                 )
+
             except Exception as e:
                 current_step += 1
                 self.ui_callback(
                     progress=current_step / total_steps,
                     message=f"❌ Error merging PDFs: {e}",
                 )
-
         self.ui_callback(progress=1.0, message="✅ All tasks completed.", done=True)
 
 
@@ -318,6 +292,31 @@ class FAMSApp:
         root.configure(bg="#f0f4ff")
         style = ttk.Style(root)
         style.theme_use("clam")
+
+        style.configure(
+            "Amazing.Treeview",
+            background="#ffffff",
+            foreground="#333333",
+            rowheight=28,
+            fieldbackground="#ffffff",
+            font=("Segoe UI", 10),
+        )
+
+        style.configure(
+            "Amazing.Treeview.Heading",
+            background="#2e4a9d",
+            foreground="white",
+            font=("Segoe UI", 11, "bold"),
+            relief="raised",
+        )
+
+        style.map(
+            "Amazing.Treeview",
+            background=[("selected", "#c7d7ff")],
+            foreground=[("selected", "#000000")],
+        )
+
+        style.map("Amazing.Treeview.Heading", background=[("active", "#1f3a8a")])
 
         style.configure(
             "Red.Horizontal.TProgressbar",
@@ -447,6 +446,7 @@ class FAMSApp:
             image=help_imgtk,
             cursor="hand2",
             font=("Segoe UI", 15, "bold"),
+            text_color="#FFFFFF",
             width=10,
             command=self.show_help,
         ).grid(row=0, column=3, sticky="e", padx=10)
@@ -468,11 +468,17 @@ class FAMSApp:
             columns=("sid", "name"),
             show="headings",
             height=14,
+            style="Amazing.Treeview",
             yscrollcommand=scrollbar.set,
         )
+        self.tree.tag_configure("oddrow", background="#f4f6fb")
+        self.tree.tag_configure("evenrow", background="#ffffff")
         self.tree.heading("sid", text="Student Number")
-        self.tree.heading("name", text="Name")
+        self.tree.heading("name", text="Student Name")
+        self.tree.column("sid", width=160, anchor="center")
+        self.tree.column("name", width=360, anchor="w")
         self.tree.pack(fill="both", expand=True, padx=6, pady=4)
+
         scrollbar.config(command=self.tree.yview)
         self.lbl_count = tk.Label(
             left,
@@ -508,6 +514,7 @@ class FAMSApp:
             # text_color="black",
             cursor="hand2",
             font=("Segoe UI", 15, "bold"),
+            text_color="#FFFFFF",
             width=10,
             command=self.start_generate,
         )
@@ -553,7 +560,7 @@ class FAMSApp:
             image=openfoldertk,
             command=self.open_output,
             font=("Segoe UI", 12, "bold"),
-            # text_color="black",
+            text_color="#FFFFFF",
             cursor="hand2",
         )
         self.btn_open_output.pack(pady=6)
@@ -571,7 +578,7 @@ class FAMSApp:
             btn_frame,
             text="Download Logs",
             font=("Segoe UI", 12, "bold"),
-            fg_color="#FF0808",
+            fg_color="#7C0E0E",
             command=self.save_logs,
             cursor="hand2",
             image=img_logtk,
@@ -598,7 +605,7 @@ class FAMSApp:
             text="Clear Fields",
             image=clear_imgtk,
             command=self.clear_fields,
-            fg_color="#7C0E0E",
+            fg_color="#EE0808",
             font=("Segoe UI", 12, "bold"),
             width=110,
         )
@@ -634,17 +641,17 @@ class FAMSApp:
         )
         self.log.pack(padx=6, pady=(0, 6))
 
-    def set_busy_ui(self):
-        self.root.config(cursor="watch")
-        for btn in self.all_buttons:
-            btn.configure(state="disabled")
-        self.root.update_idletasks()
+    # def set_busy_ui(self):
+    #     self.root.config(cursor="watch")
+    #     for btn in self.all_buttons:
+    #         btn.configure(state="disabled")
+    #     self.root.update_idletasks()
 
-    def set_normal_ui(self):
-        self.root.config(cursor="")
-        for btn in self.all_buttons:
-            btn.configure(state="normal")
-        self.root.update_idletasks()
+    # def set_normal_ui(self):
+    #     self.root.config(cursor="")
+    #     for btn in self.all_buttons:
+    #         btn.configure(state="normal")
+    #     self.root.update_idletasks()
 
     def on_close(self):
         if messagebox.askokcancel("Exit", "Are you sure to exit FAMS?"):
@@ -696,8 +703,13 @@ class FAMSApp:
     def refresh_table(self):
         for r in self.tree.get_children():
             self.tree.delete(r)
-        for s in self.students[:2000]:
-            self.tree.insert("", "end", values=(s["student_number"], s["name"]))
+
+        for i, s in enumerate(self.students[:2000]):
+            tag = "evenrow" if i % 2 == 0 else "oddrow"
+            self.tree.insert(
+                "", "end", values=(s["student_number"], s["name"]), tags=(tag,)
+            )
+
         self.lbl_count.config(text=f"{len(self.students)} students loaded")
 
     def start_generate(self):
@@ -713,7 +725,6 @@ class FAMSApp:
         self.progress["value"] = 0
         self.progress_label.config(text="0%")
         self.log_message("Starting...")
-        self.set_busy_ui()
 
         Worker(
             self.students,
@@ -732,7 +743,7 @@ class FAMSApp:
             if message:
                 self.log_message(message)
             if done:
-                self.set_normal_ui()
+
                 messagebox.showinfo("Done", "All tasks completed.")
 
         self.root.after(0, update)
