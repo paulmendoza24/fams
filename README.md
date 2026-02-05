@@ -34,16 +34,18 @@ It is designed for academic institutions to quickly generate forms, letters, cer
 ```
 ├── main.py
 ├── assets/
-│ ├── mbc.ico
-│ ├── mbc.png
-│ ├── splash.png
-│ ├── browse.png
-│ ├── help.png
-│ ├── genrate.png
-│ ├── openfolder.png
-│ ├── log.png
-│ ├── clear.png
-│ └── ss_example.png
+|   ├── mbc.ico
+│   ├── mbc.png
+│   ├── splash.png
+│   ├── browse.png
+│   ├── check.png
+│   ├── help.png
+│   ├── genrate.png
+│   ├── openfolder.png
+│   ├── log.png
+│   ├── clear.png
+│   ├── ss_example.png
+│   └── ss1_example.png
 ├── fams_output/
 │ ├── docx/
 │ ├── pdf/
