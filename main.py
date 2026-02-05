@@ -39,15 +39,6 @@ encodings = [
 green_hex = "#228B22"
 hover_green_hex = "#1F7E1F"
 
-# LibreOffice paths
-LIBREOFFICE_DIR = "LibreOffice"
-if sys.platform.startswith("win"):
-    LIBREOFFICE_EXE = os.path.join(LIBREOFFICE_DIR, "program", "soffice.exe")
-elif sys.platform == "darwin":
-    LIBREOFFICE_EXE = os.path.join(LIBREOFFICE_DIR, "MacOS", "soffice")
-else:
-    LIBREOFFICE_EXE = os.path.join(LIBREOFFICE_DIR, "program", "soffice")
-
 
 def wait_for_pdf(path, timeout=15):
     start = time.time()
@@ -107,6 +98,7 @@ def read_students(path, log_func=None):
         messagebox.showerror("File Type Error", err_msg)
         raise ValueError(err_msg)
 
+    # ---------------- Column Detection ----------------
     cols = {c.strip().lower(): c for c in df.columns}
     name_col, id_col = None, None
     for cand in ["name", "full name", "student name", "student"]:
@@ -125,20 +117,15 @@ def read_students(path, log_func=None):
             id_col = cols[cand]
             break
 
+    # ---------------- Error if placeholders missing ----------------
     if name_col is None or id_col is None:
-        if df.shape[1] >= 2:
-            name_col, id_col = df.columns[0], df.columns[1]
-            if log_func:
-                log_func(
-                    f"Using first two columns as Name and Student Number: {name_col}, {id_col}"
-                )
-        else:
-            err_msg = "Could not detect name and student number columns."
-            if log_func:
-                log_func(err_msg)
-            messagebox.showerror("Column Error", err_msg)
-            raise ValueError(err_msg)
+        err_msg = "❌ Missing required columns in student file! Expected 'name' and 'student_number'."
+        if log_func:
+            log_func(err_msg)
+        messagebox.showerror("Column Error", err_msg)
+        raise ValueError(err_msg)
 
+    # ---------------- Load Students ----------------
     students = []
     for _, row in df.iterrows():
         name = str(row.get(name_col, "")).strip()
@@ -155,29 +142,6 @@ def kill_word():
     if sys.platform.startswith("win"):
         os.system("taskkill /f /im WINWORD.EXE >nul 2>&1")
         time.sleep(1)
-
-
-def kill_libreoffice():
-    """Kill any running LibreOffice processes"""
-    if sys.platform.startswith("win"):
-        os.system("taskkill /f /im soffice.bin >nul 2>&1")
-        os.system("taskkill /f /im soffice.exe >nul 2>&1")
-        time.sleep(1)
-    elif sys.platform == "darwin":
-        os.system("pkill -f soffice >/dev/null 2>&1")
-        os.system("pkill -f LibreOffice >/dev/null 2>&1")
-        time.sleep(1)
-    else:
-        os.system("pkill -f soffice >/dev/null 2>&1")
-        os.system("pkill -f libreoffice >/dev/null 2>&1")
-        time.sleep(1)
-
-
-def check_libreoffice():
-    """Check if LibreOffice is available in the local folder"""
-    if os.path.exists(LIBREOFFICE_EXE):
-        return LIBREOFFICE_EXE
-    return None
 
 
 def convert_with_word(docx_path, pdf_path, log_func=None):
@@ -254,90 +218,6 @@ def convert_with_word(docx_path, pdf_path, log_func=None):
         return False
 
 
-# def convert_with_libreoffice(docx_path, pdf_path, log_func=None):
-#     """Convert DOCX to PDF using local LibreOffice"""
-#     libreoffice_exe = check_libreoffice()
-
-#     if not libreoffice_exe:
-#         if log_func:
-#             log_func("❌ LibreOffice not found in local folder")
-#         return False
-
-#     try:
-#         # Kill any existing LibreOffice processes
-#         kill_libreoffice()
-#         time.sleep(1)
-
-#         # Create command for LibreOffice
-#         cmd = [
-#             libreoffice_exe,
-#             "--headless",  # Run in background
-#             "--convert-to",
-#             "pdf:writer_pdf_Export",  # Convert to PDF with export filter
-#             "--outdir",
-#             os.path.dirname(pdf_path),  # Output directory
-#             docx_path,  # Input file
-#         ]
-
-#         if log_func:
-#             log_func(f"📤 Converting with LibreOffice: {os.path.basename(docx_path)}")
-
-#         # Run conversion
-#         if sys.platform.startswith("win"):
-#             creation_flags = subprocess.CREATE_NO_WINDOW
-#         else:
-#             creation_flags = 0
-
-#         result = subprocess.run(
-#             cmd,
-#             capture_output=True,
-#             text=True,
-#             timeout=30,  # 30 second timeout
-#             creationflags=creation_flags,
-#         )
-
-#         if result.returncode == 0:
-#             # Check if PDF was created
-#             if os.path.exists(pdf_path):
-#                 if log_func:
-#                     log_func(
-#                         f"✅ LibreOffice conversion successful: {os.path.basename(pdf_path)}"
-#                     )
-#                 return True
-#             else:
-#                 # Sometimes LibreOffice creates PDF with different name
-#                 base_name = os.path.splitext(os.path.basename(docx_path))[0]
-#                 possible_pdf = os.path.join(
-#                     os.path.dirname(pdf_path), f"{base_name}.pdf"
-#                 )
-#                 if os.path.exists(possible_pdf):
-#                     os.rename(possible_pdf, pdf_path)
-#                     if log_func:
-#                         log_func(
-#                             f"✅ LibreOffice conversion successful (renamed): {os.path.basename(pdf_path)}"
-#                         )
-#                     return True
-
-#         # Log error if conversion failed
-#         if log_func:
-#             error_msg = result.stderr if result.stderr else "Unknown error"
-#             log_func(f"❌ LibreOffice conversion failed: {error_msg[:100]}")
-
-#         return False
-
-#     except subprocess.TimeoutExpired:
-#         if log_func:
-#             log_func("⏰ LibreOffice conversion timeout")
-#         return False
-#     except Exception as e:
-#         if log_func:
-#             log_func(f"❌ LibreOffice conversion error: {str(e)[:100]}")
-#         return False
-#     finally:
-#         # Clean up LibreOffice processes
-#         kill_libreoffice()
-
-
 def create_simple_pdf(pdf_path, student_data, log_func=None):
     """Create a simple PDF as last resort"""
     try:
@@ -372,11 +252,7 @@ def create_simple_pdf(pdf_path, student_data, log_func=None):
         )
 
         c.setFont("Helvetica", 14)
-        c.drawString(
-            1 * inch,
-            height - 1.5 * inch,
-            f"Student Number: {student_data.get('student_number', '')}",
-        )
+
         c.drawString(
             1 * inch, height - 1.8 * inch, f"Date: {student_data.get('date', '')}"
         )
@@ -409,12 +285,14 @@ def create_simple_pdf(pdf_path, student_data, log_func=None):
         return False
 
 
+# ---------------- Worker Class ----------------
 class Worker(threading.Thread):
     def __init__(
         self,
         students,
         template_path,
         ui_callback,
+        gen_docx=False,
         gen_pdf=False,
         merge_docx=False,
         merge_pdf=False,
@@ -423,77 +301,90 @@ class Worker(threading.Thread):
         self.students = students
         self.template_path = template_path
         self.ui_callback = ui_callback
+        self.gen_docx = gen_docx
         self.gen_pdf = gen_pdf
         self.merge_docx = merge_docx
         self.merge_pdf = merge_pdf
 
     def run(self):
         total_steps = len(self.students)
+        if self.gen_docx:
+            total_steps += 1
         if self.gen_pdf:
             total_steps += 1
         if self.merge_docx:
             total_steps += 1
         if self.merge_pdf:
             total_steps += 1
+
         current_step = 0
-        now = datetime.now().strftime("%B %d, %Y")
         docx_files, pdf_files = [], []
 
-        # Generate DOCX files
+        # ---------------- Generate DOCX files ----------------
         for s in self.students:
             try:
                 tpl = DocxTemplate(self.template_path)
                 context = {
                     "name": s["name"],
                     "student_number": s["student_number"],
-                    "date": now,
                 }
+                placeholders_in_template = tpl.get_undeclared_template_variables()
+                required = {"name", "student_number"}
+
+                missing_required = required - placeholders_in_template
+                if missing_required:
+                    self.ui_callback(
+                        progress=current_step / total_steps,
+                        message=f"❌ Template missing required placeholder(s): {', '.join(missing_required)}",
+                        error=True,
+                    )
+                    return
+
+                tpl.render(context)
 
                 safe_name = sanitize_filename(s["name"])
                 filename = f"{s['student_number']}_{safe_name}.docx"
                 out_docx = os.path.join(DOCX_OUT, filename)
-
                 os.makedirs(os.path.dirname(out_docx), exist_ok=True)
-
-                tpl.render(context)
                 tpl.save(out_docx)
-
-                if not os.path.exists(out_docx):
-                    raise FileNotFoundError(f"File not saved: {out_docx}")
-
                 docx_files.append(out_docx)
+
                 current_step += 1
                 self.ui_callback(
                     progress=current_step / total_steps,
                     message=f"✅ Generated DOCX: {filename}",
                 )
+
             except Exception as e:
-                current_step += 1
                 self.ui_callback(
                     progress=current_step / total_steps,
-                    message=f"❌ Error for {s['name']}: {str(e)[:100]}",
+                    message=f"❌ Error for {s['name']}: {str(e)[:150]}",
+                    error=True,
                 )
+                return  # Stop immediately
 
-        # Generate PDF files if requested
+            except Exception as e:
+                self.ui_callback(
+                    progress=current_step / total_steps,
+                    message=f"❌ Error for {s['name']}: {str(e)[:150]}",
+                    error=True,
+                )
+                return  # Stop immediately
+
+        # ---------------- Generate PDF files ----------------
         if self.gen_pdf:
             self.ui_callback(
                 progress=current_step / total_steps,
                 message="🔄 Starting PDF conversion...",
             )
-
             os.makedirs(PDF_OUT, exist_ok=True)
 
             total_files = len(docx_files)
             processed_files = 0
 
-            # Check for available conversion methods
-            libreoffice_available = check_libreoffice() is not None
-
-            # Try Microsoft Word first (Windows only), then LibreOffice, then simple PDF
             for f in docx_files:
                 pdf_name = os.path.splitext(os.path.basename(f))[0] + ".pdf"
                 pdf_path = os.path.join(PDF_OUT, pdf_name)
-
                 success = False
 
                 # Find student data for this file
@@ -504,17 +395,15 @@ class Worker(threading.Thread):
                         student_data = {
                             "name": s["name"],
                             "student_number": s["student_number"],
-                            "date": now,
                         }
                         break
 
-                # Method 1: Try Microsoft Word first (Windows only)
+                # Method 1: Microsoft Word (Windows only)
                 if sys.platform.startswith("win"):
                     self.ui_callback(message=f"🔄 Trying Microsoft Word: {pdf_name}")
                     success = convert_with_word(
                         f, pdf_path, lambda msg: self.ui_callback(message=msg)
                     )
-
                     if success and is_valid_pdf(pdf_path):
                         pdf_files.append(pdf_path)
                         self.ui_callback(
@@ -523,22 +412,7 @@ class Worker(threading.Thread):
                     else:
                         success = False
 
-                # Method 2: Try LibreOffice (if Word failed or not Windows)
-                # if not success and libreoffice_available:
-                #     self.ui_callback(message=f"🔄 Trying LibreOffice: {pdf_name}")
-                #     success = convert_with_libreoffice(
-                #         f, pdf_path, lambda msg: self.ui_callback(message=msg)
-                #     )
-
-                #     if success and is_valid_pdf(pdf_path):
-                #         pdf_files.append(pdf_path)
-                #         self.ui_callback(
-                #             message=f"✅ PDF created (LibreOffice): {pdf_name}"
-                #         )
-                #     else:s
-                #         success = False
-
-                # Method 3: Last resort: simple PDF
+                # Method 2: Simple PDF fallback
                 if not success and student_data:
                     self.ui_callback(message=f"🔄 Creating simple PDF for: {pdf_name}")
                     success = create_simple_pdf(
@@ -546,17 +420,18 @@ class Worker(threading.Thread):
                         student_data,
                         lambda msg: self.ui_callback(message=msg),
                     )
-
                     if success and os.path.exists(pdf_path):
                         pdf_files.append(pdf_path)
                         self.ui_callback(message=f"✅ Simple PDF created: {pdf_name}")
                     else:
                         success = False
 
+                # If all PDF methods fail
                 if not success:
                     self.ui_callback(
-                        message=f"❌ All PDF conversion methods failed for: {pdf_name}"
+                        message=f"❌ PDF conversion failed for: {pdf_name}", error=True
                     )
+                    return  # Stop immediately
 
                 processed_files += 1
                 progress_increment = 1 / total_files / total_steps
@@ -567,25 +442,20 @@ class Worker(threading.Thread):
                     progress=current_progress,
                     message=f"🔄 Converting ({processed_files}/{total_files})...",
                 )
-
-                # Small delay between conversions
-                time.sleep(0.5)
+                time.sleep(0.3)  # small delay
 
             current_step += 1
             self.ui_callback(
                 progress=current_step / total_steps,
                 message="✅ PDF conversion completed",
             )
-            # Clean up processes
-            kill_word()
-            kill_libreoffice()
+            kill_word()  # cleanup
 
-        # Merge DOCX files if requested
+        # ---------------- Merge DOCX files ----------------
         if self.merge_docx and docx_files:
             try:
                 master = Document(docx_files[0])
                 composer = Composer(master)
-
                 for f in docx_files[1:]:
                     composer.append(Document(f))
 
@@ -599,42 +469,46 @@ class Worker(threading.Thread):
                     message=f"✅ Merged DOCX saved: {merged_path}",
                 )
             except Exception as e:
+                self.ui_callback(
+                    progress=current_step / total_steps,
+                    message=f"❌ Error merging DOCX: {str(e)[:150]}",
+                    error=True,
+                )
+                return
+
+        # ---------------- Merge PDF files ----------------
+        if self.merge_pdf:
+            if not self.gen_pdf:
+                self.ui_callback(
+                    message="⚠️ Cannot merge PDFs without generating PDFs.", error=True
+                )
+                return
+            try:
+                valid_pdfs = [f for f in pdf_files if is_valid_pdf(f)]
+                if not valid_pdfs:
+                    self.ui_callback(message="⚠️ No valid PDFs to merge.", error=True)
+                    return
+
+                merger = PdfMerger(strict=False)
+                for f in valid_pdfs:
+                    merger.append(f)
+                merged_pdf_path = os.path.join(MERGED_PDF_OUT, "MERGED_ALL.pdf")
+                os.makedirs(MERGED_PDF_OUT, exist_ok=True)
+                merger.write(merged_pdf_path)
+                merger.close()
                 current_step += 1
                 self.ui_callback(
                     progress=current_step / total_steps,
-                    message=f"❌ Error merging DOCX: {str(e)[:100]}",
+                    message=f"✅ Merged PDF saved: {merged_pdf_path}",
                 )
 
-        # Merge PDF files if requested
-        if self.merge_pdf:
-            if not self.gen_pdf:
-                self.ui_callback(message="⚠️ Cannot merge PDFs without generating PDFs.")
-            else:
-                try:
-                    valid_pdfs = [f for f in pdf_files if is_valid_pdf(f)]
-
-                    if not valid_pdfs:
-                        self.ui_callback(message="⚠️ No valid PDFs to merge.")
-                    else:
-                        merger = PdfMerger(strict=False)
-                        for f in valid_pdfs:
-                            merger.append(f)
-
-                        merged_pdf_path = os.path.join(MERGED_PDF_OUT, "MERGED_ALL.pdf")
-                        os.makedirs(MERGED_PDF_OUT, exist_ok=True)
-                        merger.write(merged_pdf_path)
-                        merger.close()
-
-                        self.ui_callback(
-                            message=f"✅ Merged PDF saved: {merged_pdf_path}"
-                        )
-
-                except Exception as e:
-                    current_step += 1
-                    self.ui_callback(
-                        progress=current_step / total_steps,
-                        message=f"❌ Error merging PDFs: {str(e)[:100]}",
-                    )
+            except Exception as e:
+                self.ui_callback(
+                    progress=current_step / total_steps,
+                    message=f"❌ Error merging PDFs: {str(e)[:150]}",
+                    error=True,
+                )
+                return
 
         self.ui_callback(progress=1.0, message="✅ All tasks completed.", done=True)
 
@@ -738,12 +612,12 @@ class FAMSApp:
         )
         self.lbl_file.grid(row=0, column=1, sticky="w", padx=8)
         browse_img = Image.open("assets/browse.png").resize((20, 20))
-        browse_imgtk = ImageTk.PhotoImage(browse_img)
+        self.browse_imgtk = ImageTk.PhotoImage(browse_img)
         self.btn_file = ctk.CTkButton(
             topf,
             text="Browse",
             font=("Segoe UI", 13, "bold"),
-            image=browse_imgtk,
+            image=self.browse_imgtk,
             corner_radius=5,
             fg_color=green_hex,
             hover_color=hover_green_hex,
@@ -774,7 +648,7 @@ class FAMSApp:
             topf,
             text="Browse",
             font=("Segoe UI", 13, "bold"),
-            image=browse_imgtk,
+            image=self.browse_imgtk,
             corner_radius=5,
             fg_color=green_hex,
             hover_color=hover_green_hex,
@@ -860,30 +734,41 @@ class FAMSApp:
         self.generate_btn.pack(pady=(8, 6))
         self.all_buttons.append(self.generate_btn)
 
+        self.docx_var = tk.BooleanVar()
         self.pdf_var = tk.BooleanVar()
         self.merge_docx_var = tk.BooleanVar()
         self.merge_pdf_var = tk.BooleanVar()
-        tk.Checkbutton(
+        ctk.CTkCheckBox(
+            right,
+            text="Generate Docx",
+            variable=self.docx_var,
+            text_color="#000000",
+            font=("Segoe UI", 14, "bold"),
+        ).pack(pady=2, padx=50, anchor="w")
+
+        ctk.CTkCheckBox(
             right,
             text="Generate PDF also",
             variable=self.pdf_var,
-            bg="#f0f4ff",
-            font=("Segoe UI", 10),
-        ).pack()
-        tk.Checkbutton(
+            text_color="#000000",
+            font=("Segoe UI", 14, "bold"),
+        ).pack(pady=2, padx=50, anchor="w")
+
+        ctk.CTkCheckBox(
             right,
             text="Merge all DOCX",
             variable=self.merge_docx_var,
-            bg="#f0f4ff",
-            font=("Segoe UI", 10),
-        ).pack()
-        tk.Checkbutton(
+            text_color="#000000",
+            font=("Segoe UI", 14, "bold"),
+        ).pack(pady=2, padx=50, anchor="w")
+
+        ctk.CTkCheckBox(
             right,
             text="Merge all PDFs",
             variable=self.merge_pdf_var,
-            bg="#f0f4ff",
-            font=("Segoe UI", 10),
-        ).pack()
+            text_color="#000000",
+            font=("Segoe UI", 14, "bold"),
+        ).pack(pady=2, padx=50, anchor="w")
 
         openfolder_img = Image.open("assets/openfolder.png").resize((30, 30))
         openfoldertk = ImageTk.PhotoImage(openfolder_img)
@@ -992,6 +877,22 @@ class FAMSApp:
     def browse_template(self):
         path = filedialog.askopenfilename(filetypes=[("Word Document", "*.docx")])
         if path and path.lower().endswith(".docx"):
+            # Load template
+            try:
+                tpl = DocxTemplate(path)
+                required_placeholders = {"name", "student_number"}
+                template_placeholders = tpl.get_undeclared_template_variables()
+                missing = required_placeholders - template_placeholders
+                if missing:
+                    messagebox.showerror(
+                        "Template Error",
+                        f"The template is missing required placeholders:\n{', '.join(missing)}",
+                    )
+                    return
+            except Exception as e:
+                messagebox.showerror("Template Error", f"Failed to read template: {e}")
+                return
+
             self.template_path = path
             self.lbl_template.configure(text=os.path.basename(path), fg="green")
             self.btn_template.configure(text="Browse")
@@ -1023,20 +924,21 @@ class FAMSApp:
         if not self.template_path:
             messagebox.showwarning("No template", "Select a DOCX template.")
             return
-
-        # Check for local LibreOffice
-        libreoffice_available = check_libreoffice() is not None
-
-        if self.pdf_var.get():
-            if not libreoffice_available and not sys.platform.startswith("win"):
-                response = messagebox.askyesno(
-                    "PDF Conversion Warning",
-                    "Neither Microsoft Word (Windows only) nor LibreOffice found.\n\n"
-                    "Only simple PDFs can be generated.\n\n"
-                    "Continue?",
-                )
-                if not response:
-                    return
+        if not (
+            self.docx_var.get()
+            or self.pdf_var.get()
+            or self.merge_docx_var.get()
+            or self.merge_pdf_var.get()
+        ):
+            messagebox.showwarning(
+                "No options selected",
+                "Please check at least one option to generate:\n"
+                "- Generate Docx\n"
+                "- Generate PDF also\n"
+                "- Merge all DOCX\n"
+                "- Merge all PDFs",
+            )
+            return
 
         for folder in [DOCX_OUT, PDF_OUT, MERGED_DOCX_OUT, MERGED_PDF_OUT]:
             os.makedirs(folder, exist_ok=True)
@@ -1048,20 +950,39 @@ class FAMSApp:
             self.students,
             self.template_path,
             self.worker_callback,
+            self.docx_var.get(),
             self.pdf_var.get(),
             self.merge_docx_var.get(),
             self.merge_pdf_var.get(),
         ).start()
 
-    def worker_callback(self, progress=0.0, message="", done=False):
+    def worker_callback(self, progress=0.0, message="", done=False, error=False):
+        """
+        Callback function from Worker thread.
+        - progress: float (0.0 to 1.0)
+        - message: string log message
+        - done: True if all tasks completed
+        - error: True if an error occurred
+        """
 
         def update():
+            # Update progress bar
             self.progress["value"] = progress * 100
             self.progress_label.config(text=f"{int(progress*100)}%")
+
+            # Log message
             if message:
                 self.log_message(message)
+
+            # Show error popup if error flag is set
+            if error and message:
+                messagebox.showerror(
+                    "Error Occurred", f"{message}\n\nSee Activity Log for details."
+                )
+
+            # Show completion info
             if done:
-                messagebox.showinfo("Done", "All tasks completed.")
+                messagebox.showinfo("Done", "All tasks completed successfully.")
 
         self.root.after(0, update)
 
@@ -1162,6 +1083,25 @@ class FAMSApp:
                 except:
                     pass
 
+        def ss1example(event=None):
+            image_path = "assets/ss1_example.png"
+            if not os.path.exists(image_path):
+                return
+
+            try:
+                img = Image.open(image_path)
+                img.show()
+            except:
+                try:
+                    if sys.platform == "win32":
+                        os.startfile(image_path)
+                    elif sys.platform == "darwin":
+                        os.system(f"open {image_path}")
+                    else:
+                        os.system(f"xdg-open {image_path}")
+                except:
+                    pass
+
         section_title("1. Upload Student File").pack(fill="x")
         bullet_point("Click 'Browse' under Upload Student File", icon="☑️").pack()
         bullet_point("Supported formats: CSV, XLS, XLSX").pack()
@@ -1181,6 +1121,15 @@ class FAMSApp:
         section_title("2. Select DOCX Template").pack(fill="x")
         bullet_point("Choose a Word (.docx) template", icon="☑️").pack()
         bullet_point("Use placeholders like {{ name }}, {{ student_number }}").pack()
+        example1 = tk.Label(
+            scroll_frame,
+            text="Screen Shot Example",
+            font=("Segoe UI", 11, "underline"),
+            fg="blue",
+            cursor="hand2",
+        )
+        example1.pack(anchor="w", pady=(0, 6))
+        example1.bind("<Button-1>", ss1example)
 
         section_title("📄 Template Page Break & Formatting").pack(fill="x")
         bullet_point(
@@ -1219,18 +1168,18 @@ class FAMSApp:
 
         section_title("4. PDF Generation (Priority Order)").pack(fill="x")
         bullet_point("1. Microsoft Word (Windows only, best quality)", icon="①").pack()
-        bullet_point("2. LibreOffice Portable (if Word fails)", icon="②").pack()
+        # bullet_point("2. LibreOffice Portable (if Word fails)", icon="②").pack()
         bullet_point("3. Simple PDF (last resort)", icon="③").pack()
-        bullet_point(
-            "✅ Uses local LibreOffice from 'LibreOffice/program/soffice.exe' if needed",
-            icon="💻",
-        ).pack()
-        bullet_point(
-            "Ensure LibreOffice folder exists in the same directory as FAMS", icon="📁"
-        ).pack()
-        bullet_point(
-            "Close all Word/LibreOffice windows before running PDF conversion", icon="⚠️"
-        ).pack()
+        # bullet_point(
+        #     "✅ Uses local LibreOffice from 'LibreOffice/program/soffice.exe' if needed",
+        #     icon="💻",
+        # ).pack()
+        # bullet_point(
+        #     "Ensure LibreOffice folder exists in the same directory as FAMS", icon="📁"
+        # ).pack()
+        # bullet_point(
+        #     "Close all Word/LibreOffice windows before running PDF conversion", icon="⚠️"
+        # ).pack()
 
         section_title("5. Output Files").pack(fill="x")
         bullet_point(
@@ -1270,12 +1219,12 @@ class FAMSApp:
         bullet_point("Do not open DOCX files while generating PDFs").pack()
         bullet_point("Make sure the template file is closed").pack()
         bullet_point("Large student lists may take time").pack()
-        bullet_point(
-            "Close all Word/LibreOffice windows before running", icon="⚠️"
-        ).pack()
-        bullet_point(
-            "For best PDF quality, ensure LibreOffice folder exists", icon="✅"
-        ).pack()
+        # bullet_point(
+        #     "Close all Word/LibreOffice windows before running", icon="⚠️"
+        # ).pack()
+        # bullet_point(
+        #     "For best PDF quality, ensure LibreOffice folder exists", icon="✅"
+        # ).pack()
         bullet_point(
             "Windows users get best results with Microsoft Word", icon="💯"
         ).pack()
