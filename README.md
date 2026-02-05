@@ -136,7 +136,7 @@ All generated files are saved in:
 ## 🛠 Requirements
 
 ### Python Version
-- Python **3.9 or later**
+- Python **3.12+**
 
 ### Required Python Packages
 
