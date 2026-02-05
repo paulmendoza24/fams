@@ -1,6 +1,7 @@
 pandas
 docxtpl
 docxcompose
+python-docx
 Pillow
 PyPDF2
 customtkinter
