@@ -14,6 +14,8 @@ from PyPDF2 import PdfMerger
 import unicodedata
 import time
 from PyPDF2 import PdfReader
+import pygame
+import pyttsx3
 
 import customtkinter as ctk
 
@@ -47,6 +49,15 @@ def wait_for_pdf(path, timeout=15):
             return True
         time.sleep(0.3)
     return False
+
+
+def play_wav(file_path):
+    pygame.mixer.init()
+    pygame.mixer.music.load(file_path)
+    pygame.mixer.music.play()
+
+    while pygame.mixer.music.get_busy():
+        continue
 
 
 def is_valid_pdf(path):
@@ -307,6 +318,7 @@ class Worker(threading.Thread):
         self.merge_pdf = merge_pdf
 
     def run(self):
+        play_wav("assets/sounds/Generating.wav")
         total_steps = len(self.students)
         if self.gen_docx:
             total_steps += 1
@@ -511,6 +523,7 @@ class Worker(threading.Thread):
                 return
 
         self.ui_callback(progress=1.0, message="✅ All tasks completed.", done=True)
+        play_wav("assets/sounds/completed.wav")
 
 
 class FAMSApp:
@@ -523,6 +536,7 @@ class FAMSApp:
         root.geometry("950x680")
         root.iconbitmap("assets/mbc.ico")
         root.configure(bg="#f0f4ff")
+
         style = ttk.Style(root)
         style.theme_use("clam")
 
@@ -904,6 +918,18 @@ class FAMSApp:
         else:
             messagebox.showerror("Invalid", "Please select a DOCX template.")
 
+    def speak(self, text):
+        engine = pyttsx3.init()
+        voices = engine.getProperty("voices")
+
+        for voice in voices:
+            if "female" in voice.name.lower() or "zira" in voice.name.lower():
+                engine.setProperty("voice", voice.id)
+                break
+
+        engine.say(text)
+        engine.runAndWait()
+
     def refresh_table(self):
         for r in self.tree.get_children():
             self.tree.delete(r)
@@ -913,15 +939,26 @@ class FAMSApp:
             self.tree.insert(
                 "", "end", values=(s["student_number"], s["name"]), tags=(tag,)
             )
-
+        threading.Thread(
+            target=lambda: self.speak(f"{len(self.students)} students loaded"),
+            daemon=True,
+        ).start()
         self.lbl_count.config(text=f"{len(self.students)} students loaded")
 
     def start_generate(self):
 
         if not self.students:
+            threading.Thread(
+                target=lambda: play_wav("assets/sounds/upload_data_first.wav"),
+                daemon=True,
+            ).start()
             messagebox.showwarning("No data", "Upload student data first.")
             return
         if not self.template_path:
+            threading.Thread(
+                target=lambda: play_wav("assets/sounds/select_docx_temp.wav"),
+                daemon=True,
+            ).start()
             messagebox.showwarning("No template", "Select a DOCX template.")
             return
         if not (
@@ -982,6 +1019,7 @@ class FAMSApp:
 
             # Show completion info
             if done:
+
                 messagebox.showinfo("Done", "All tasks completed successfully.")
 
         self.root.after(0, update)
@@ -1002,6 +1040,9 @@ class FAMSApp:
             return
         with open(LOG_FILE, "w", encoding="utf-8") as f:
             f.write(logs)
+        threading.Thread(
+            target=lambda: play_wav("assets/sounds/download_log.wav"), daemon=True
+        ).start()
         messagebox.showinfo("Logs Saved", f"Logs saved to:\n{LOG_FILE}")
 
     def show_help(self):
@@ -1108,6 +1149,13 @@ class FAMSApp:
         bullet_point(
             "File must contain Name and Student Number columns\n(𝐞.𝐠 𝐬𝐭𝐮𝐝𝐞𝐧𝐭_𝐧𝐮𝐦𝐛𝐞𝐫 | 𝐧𝐚𝐦𝐞)"
         ).pack()
+        bullet_point("Format Supported:").pack()
+        bullet_point(
+            '𝐅𝐨𝐫 𝐒𝐭𝐮𝐝𝐞𝐧𝐭 𝐍𝐮𝐦𝐛𝐞𝐫: \n["student_number","student no","student_no","id","studentid",\n"student number"]'
+        ).pack()
+        bullet_point(
+            '𝐅𝐨𝐫 𝐒𝐭𝐮𝐝𝐞𝐧𝐭 𝐍𝐚𝐦𝐞: ["name", "full name", "student name", "student"]'
+        ).pack()
         example = tk.Label(
             scroll_frame,
             text="Screen Shot Example",
@@ -1120,7 +1168,9 @@ class FAMSApp:
 
         section_title("2. Select DOCX Template").pack(fill="x")
         bullet_point("Choose a Word (.docx) template", icon="☑️").pack()
-        bullet_point("Use placeholders like {{ name }}, {{ student_number }}").pack()
+        bullet_point(
+            "⚠️ Make sure use placeholders like {{ 𝐧𝐚𝐦𝐞 }}, {{ 𝐬𝐭𝐮𝐝𝐞𝐧𝐭_𝐧𝐮𝐦𝐛𝐞𝐫 }}"
+        ).pack()
         example1 = tk.Label(
             scroll_frame,
             text="Screen Shot Example",
@@ -1162,14 +1212,15 @@ class FAMSApp:
         section_title("3. Generate Documents").pack(fill="x")
         bullet_point("Click 🚀 Generate Documents", icon="▶️").pack()
         bullet_point("Optional:", fg="#555555").pack()
-        bullet_point("Generate PDF", icon="✓").pack()
+        bullet_point("Generate Docx", icon="✓").pack()
+        bullet_point("Generate PDF also", icon="✓").pack()
         bullet_point("Merge all DOCX", icon="✓").pack()
         bullet_point("Merge all PDFs", icon="✓").pack()
 
         section_title("4. PDF Generation (Priority Order)").pack(fill="x")
         bullet_point("1. Microsoft Word (Windows only, best quality)", icon="①").pack()
         # bullet_point("2. LibreOffice Portable (if Word fails)", icon="②").pack()
-        bullet_point("3. Simple PDF (last resort)", icon="③").pack()
+        bullet_point("2. Simple PDF (last resort)", icon="②").pack()
         # bullet_point(
         #     "✅ Uses local LibreOffice from 'LibreOffice/program/soffice.exe' if needed",
         #     icon="💻",
@@ -1274,6 +1325,9 @@ class FAMSApp:
         self.log.config(state="disabled")
         self.progress["value"] = 0
         self.progress_label.config(text="0%")
+        threading.Thread(
+            target=lambda: play_wav("assets/sounds/Cleared.wav"), daemon=True
+        ).start()
         self.log_message("🧹 Cleared all fields.")
 
 
@@ -1281,6 +1335,9 @@ if __name__ == "__main__":
     splash = tk.Tk()
     splash.overrideredirect(True)
     splash.wm_attributes("-topmost", True)
+    threading.Thread(
+        target=lambda: play_wav("assets/sounds/fams.wav"), daemon=True
+    ).start()
 
     if sys.platform.startswith("win"):
         splash.configure(bg="#FF66C4")
