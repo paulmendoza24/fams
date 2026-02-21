@@ -2,8 +2,11 @@ pandas
 docxtpl
 docxcompose
 python-docx
-Pillow
 PyPDF2
+Pillow
+pygame
+pyttsx3
 customtkinter
+openpyxl
 reportlab
 pywin32
